@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SkillExchange — Peer-to-peer Mentorship</title>
+
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Inter font for nicer typography -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root { --brand: #0ea5a4; --accent: #7c3aed; }
+    html,body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+    .chip { display:inline-flex; align-items:center; gap:.5rem; padding:.28rem .6rem; border-radius:9999px; background:rgba(15,23,42,0.04); font-size:.85rem; }
+    .glass { background: linear-gradient(135deg, rgba(255,255,255,0.75), rgba(255,255,255,0.6)); backdrop-filter: blur(6px); }
+    .fade-enter { opacity:0; transform: translateY(6px); }
+    .fade-enter-active { transition: all .28s ease; opacity:1; transform: translateY(0); }
+  </style>
+</head>
+<body class="bg-gradient-to-b from-sky-50 to-white min-h-screen text-slate-800">
+
+  <div class="max-w-6xl mx-auto p-4">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between py-4">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-teal-400 to-indigo-500 flex items-center justify-center text-white font-bold shadow-lg">SE</div>
+        <div>
+          <h1 class="text-2xl font-extrabold">SkillExchange</h1>
+          <p class="text-xs text-slate-500 mt-0.5">Trade skills. Earn tokens. Learn from your community.</p>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-3">
+        <button id="navHome" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100">Home</button>
+        <button id="navBrowse" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100">Browse</button>
+        <button id="navProfile" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-100">Profile</button>
+
+        <div id="userArea" class="flex items-center gap-3 ml-4">
+          <!-- Dynamic -->
+        </div>
+      </nav>
+    </header>
+
+    <!-- App container -->
+    <main id="root" class="mt-6"></main>
+
+    <footer class="mt-12 text-center text-sm text-slate-500 pb-6">
+      Built for Vibecoding Hackathon • HTML demo • Jitsi integration
+    </footer>
+  </div>
+
+<script>
+/* ====== SkillExchange — Single file app ======
+   - Stores users in localStorage (skillExchange_users)
+   - Real Jitsi integration via meet.jit.si/<room>
+   - Polished UI with Tailwind
+============================================= */
+
+const STORAGE_KEY = "skillExchange_users_v2";
+let users = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+let currentUserId = localStorage.getItem("skillExchange_currentUser_v2") || null;
+
+// Utilities
+const $ = (s, parent=document) => parent.querySelector(s);
+const el = (tag, attrs={}, ...kids) => { const e=document.createElement(tag); for(const k in attrs) { if(k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]); else if(k==="html") e.innerHTML=attrs[k]; else e.setAttribute(k, attrs[k]); } kids.flat().forEach(k=>{ if(typeof k === "string") e.appendChild(document.createTextNode(k)); else if(k) e.appendChild(k); }); return e; };
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(users)); }
+function setCurrent(id){ currentUserId = id; localStorage.setItem("skillExchange_currentUser_v2", id || ""); renderHeader(); route('browse'); }
+function getCurrent() { return users.find(u=>u.id===currentUserId) || null; }
+function uid(prefix='u'){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+function avatarInitials(name){ return (name||'User').split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase(); }
+function avgRating(u){ return (u.ratings && u.ratings.length) ? (u.ratings.reduce((a,b)=>a+b,0)/u.ratings.length).toFixed(1) : '—'; }
+
+// Routing
+let currentRoute = 'home';
+function route(r){ currentRoute = r; if(r==='home') renderHome(); if(r==='browse') renderBrowse(); if(r==='profile') renderProfile(); if(r==='room') renderRoom(); }
+
+// Render header user area
+function renderHeader(){
+  const container = $('#userArea');
+  container.innerHTML = '';
+  const u = getCurrent();
+  if(u){
+    const avatar = el('div', { class:'w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-semibold' }, avatarInitials(u.name));
+    const info = el('div', {}, el('div', { class:'text-sm font-medium' }, u.name), el('div',{class:'text-xs text-slate-500'}, `Tokens: ${u.tokens || 0} • ${avgRating(u)}★`));
+    const logout = el('button', { class:'ml-4 px-3 py-1 bg-rose-500 text-white rounded text-sm', onclick: ()=>{ setCurrent(null); } }, 'Logout');
+    container.append(avatar, info, logout);
+  } else {
+    const loginBtn = el('button',{ class:'px-3 py-2 bg-teal-500 text-white rounded', onclick: ()=> route('home')}, 'Get started');
+    container.append(loginBtn);
+  }
+}
+
+// Home view (Landing)
+function renderHome(){
+  const root = $('#root');
+  root.innerHTML = `
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+      <div class="p-6 glass rounded-lg shadow-lg">
+        <h2 class="text-3xl font-extrabold">Learn & Teach — Without Money</h2>
+        <p class="mt-3 text-slate-600">SkillExchange is a peer-to-peer mentorship platform that lets you teach skills and earn tokens you can spend to learn from others. Built for communities across India.</p>
+        <div class="mt-5 flex gap-3">
+          <button id="ctaJoin" class="px-5 py-3 bg-gradient-to-r from-teal-400 to-indigo-500 text-white rounded-lg shadow">Create profile</button>
+          <button id="ctaExplore" class="px-5 py-3 border rounded-lg">Browse mentors</button>
+        </div>
+
+        <div class="mt-6 grid grid-cols-2 gap-3 text-sm text-slate-600">
+          <div class="p-3 rounded border bg-white">
+            <div class="font-semibold">Community-first</div>
+            <div class="mt-1">Peer learning, local connections.</div>
+          </div>
+          <div class="p-3 rounded border bg-white">
+            <div class="font-semibold">Token System</div>
+            <div class="mt-1">Teach to earn — spend to learn.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-6 bg-white rounded-lg shadow-lg">
+        <h3 class="font-semibold">Quick Start</h3>
+        <ol class="list-decimal list-inside text-slate-600 mt-3 space-y-2">
+          <li>Create a profile and add skills you can teach and want to learn.</li>
+          <li>Browse matches — schedule or start a live lesson.</li>
+          <li>Earn tokens by teaching, leave ratings to grow trust.</li>
+        </ol>
+
+        <div class="mt-6">
+          <h4 class="text-sm font-semibold text-slate-700">Demo users</h4>
+          <div id="demoUsers" class="mt-3 space-y-2"></div>
+        </div>
+      </div>
+    </section>
+  `;
+
+  // wire CTAs
+  $('#ctaJoin').onclick = ()=> { if(!getCurrent()) createQuickProfilePrompt(); route('profile'); }
+  $('#ctaExplore').onclick = ()=> { route('browse'); }
+
+  // show demo users area
+  const demoContainer = $('#demoUsers');
+  demoContainer.innerHTML = users.slice(0,6).map(u => `
+    <div class="flex items-center justify-between border p-3 rounded hover:shadow-sm">
+      <div>
+        <div class="font-medium">${u.name}</div>
+        <div class="text-xs text-slate-500 mt-0.5">${u.teaches.join(', ') || '—'}</div>
+      </div>
+      <div class="text-xs text-slate-500">${u.tokens || 0} tokens</div>
+    </div>
+  `).join('') || '<div class="text-sm text-slate-400">No users yet — create a profile to begin.</div>';
+}
+
+// Create a quick profile modal-like prompt
+function createQuickProfilePrompt(){
+  const name = prompt("Enter your name");
+  if(!name) return;
+  const id = uid();
+  users.unshift({ id, name, teaches: [], learns: [], bio:'', tokens:1, ratings:[], reviews:[] });
+  save();
+  setCurrent(id);
+}
+
+// Profile view (editor)
+function renderProfile(){
+  const u = getCurrent();
+  if(!u) { route('home'); return; }
+
+  $('#root').innerHTML = '';
+  const card = el('div', { class:'bg-white p-6 rounded-lg shadow-lg' },
+    el('div', { class:'flex items-start gap-4' },
+      el('div', { class:'w-16 h-16 rounded-md bg-slate-100 flex items-center justify-center text-2xl font-bold text-slate-700' }, avatarInitials(u.name)),
+      el('div', {},
+        el('div', { class:'flex items-center gap-2' },
+          el('input', { id:'nameInput', class:'text-xl font-semibold border-0 focus:ring-0', value: u.name }),
+          el('div', { class:'ml-2 text-xs text-slate-500' }, `${u.tokens || 0} tokens • ${avgRating(u)}★`)
+        ),
+        el('textarea', { id:'bioInput', class:'w-full mt-2 p-2 border rounded', rows:3, placeholder:'A short bio (teach/learn style)' }, u.bio || '')
+      )
+    ),
+    el('div', { class:'mt-4 grid grid-cols-1 md:grid-cols-2 gap-4' },
+      el('div', {},
+        el('div', { class:'text-sm font-medium mb-2' }, 'Skills I teach'),
+        el('div', { class:'flex gap-2' },
+          el('input', { id:'teachInput', class:'flex-1 p-2 border rounded', placeholder: 'e.g. Adobe Photoshop' }),
+          el('button', { class:'px-3 py-2 bg-slate-800 text-white rounded', onclick: ()=> addSkill('teach') }, 'Add')
+        ),
+        el('div', { id:'teachChips', class:'mt-3 flex gap-2 flex-wrap' })
+      ),
+      el('div', {},
+        el('div', { class:'text-sm font-medium mb-2' }, 'Skills I want to learn'),
+        el('div', { class:'flex gap-2' },
+          el('input', { id:'learnInput', class:'flex-1 p-2 border rounded', placeholder: 'e.g. Front-end web dev' }),
+          el('button', { class:'px-3 py-2 bg-teal-500 text-white rounded', onclick: ()=> addSkill('learn') }, 'Add')
+        ),
+        el('div', { id:'learnChips', class:'mt-3 flex gap-2 flex-wrap' })
+      )
+    ),
+    el('div', { class:'mt-4 flex justify-end gap-2' },
+      el('button', { class:'px-4 py-2 border rounded', onclick: ()=> { route('browse'); save(); } }, 'Cancel'),
+      el('button', { class:'px-4 py-2 bg-indigo-600 text-white rounded', onclick: saveProfile }, 'Save profile')
+    )
+  );
+  $('#root').appendChild(card);
+  refreshChips();
+}
+
+function addSkill(type){
+  const u = getCurrent();
+  const val = (type === 'teach' ? $('#teachInput') : $('#learnInput')).value.trim();
+  if(!val) return;
+  if(type==='teach'){ if(!u.teaches.includes(val)) u.teaches.push(val); }
+  else { if(!u.learns.includes(val)) u.learns.push(val); }
+  save();
+  refreshChips();
+  if(type==='teach') $('#teachInput').value=''; else $('#learnInput').value='';
+}
+
+function refreshChips(){
+  const u = getCurrent();
+  const containerT = $('#teachChips');
+  const containerL = $('#learnChips');
+  containerT.innerHTML = u.teaches.map(s => `<span class="chip">${s} <button onclick="removeSkill('${s}','teach')" class="ml-2 text-xs text-rose-500">×</button></span>`).join('') || '<div class="text-sm text-slate-400">No skills added</div>';
+  containerL.innerHTML = u.learns.map(s => `<span class="chip bg-teal-50 text-teal-700">${s} <button onclick="removeSkill('${s}','learn')" class="ml-2 text-xs text-rose-500">×</button></span>`).join('') || '<div class="text-sm text-slate-400">No skills added</div>';
+}
+
+function removeSkill(skill,type){
+  const u = getCurrent();
+  if(type==='teach') u.teaches = u.teaches.filter(s=>s!==skill);
+  else u.learns = u.learns.filter(s=>s!==skill);
+  save(); refreshChips();
+}
+
+function saveProfile(){
+  const u = getCurrent();
+  u.name = $('#nameInput').value.trim() || u.name;
+  u.bio = $('#bioInput').value.trim();
+  save();
+  alert('Profile saved ✅');
+  route('browse');
+}
+
+// Browse view — matches & cards
+function renderBrowse(){
+  const u = getCurrent();
+  $('#root').innerHTML = '';
+  const top = el('div', { class:'flex items-center justify-between mb-4' },
+    el('h3', { class:'text-xl font-semibold' }, 'Matches for you'),
+    el('div', {},
+      el('input', { id:'searchInput', placeholder:'Search skill or name', class:'p-2 border rounded w-60' }),
+      el('button', { class:'ml-2 px-3 py-2 bg-slate-800 text-white rounded', onclick: ()=> renderBrowse() }, 'Refresh')
+    )
+  );
+
+  $('#root').appendChild(top);
+
+  // compute matches
+  let matches = [];
+  if(u){
+    const want = (u.learns || []).map(x=>x.toLowerCase());
+    matches = users.filter(x => x.id !== u.id && x.teaches && x.teaches.some(t => want.includes(t.toLowerCase())));
+  } else {
+    matches = users;
+  }
+
+  const grid = el('div', { class:'grid grid-cols-1 md:grid-cols-2 gap-4' });
+  if(matches.length === 0){
+    grid.appendChild(el('div', { class:'bg-white p-6 rounded shadow text-slate-500' }, 'No matches found. Add skills in your profile to see matches.'));
+  } else {
+    matches.forEach(m => {
+      const card = el('div', { class:'bg-white p-4 rounded-lg shadow hover:shadow-lg transition' },
+        el('div', { class:'flex items-start gap-4' },
+          el('div', { class:'w-12 h-12 rounded-md bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-lg font-bold text-slate-700' }, avatarInitials(m.name)),
+          el('div', {},
+            el('div', { class:'flex items-center justify-between gap-3' },
+              el('div', { class:'font-semibold' }, m.name),
+              el('div', { class:'text-xs text-slate-500' }, `${avgRating(m)}★ • ${m.tokens || 0} tokens`)
+            ),
+            el('div', { class:'text-xs text-slate-500 mt-1' }, m.bio || '—'),
+            el('div', { class:'mt-3 flex gap-2 flex-wrap' }, ...(m.teaches || []).slice(0,6).map(s => el('span',{ class:'chip' }, s)))
+          )
+        ),
+        el('div', { class:'mt-4 flex items-center gap-2 justify-end' },
+          el('button', { class:'px-3 py-1 border rounded', onclick: ()=> openProfileModal(m.id) }, 'View Profile'),
+          el('button', { class:'px-3 py-1 bg-teal-500 text-white rounded', onclick: ()=> scheduleLesson(m.id) }, 'Schedule (1 token)'),
+          el('button', { class:'px-3 py-1 bg-indigo-600 text-white rounded', onclick: ()=> createJitsiRoom(m.id) }, 'Start Video')
+        )
+      );
+      grid.appendChild(card);
+    });
+  }
+  $('#root').appendChild(grid);
+}
+
+// Open profile modal (simple native modal)
+function openProfileModal(id){
+  const user = users.find(x=>x.id===id);
+  if(!user) return;
+  const details = `
+    Name: ${user.name}\n
+    Bio: ${user.bio || '—'}\n
+    Teaches: ${user.teaches.join(', ') || '—'}\n
+    Tokens: ${user.tokens || 0}\n
+    Rating: ${avgRating(user)}\n
+  `;
+  if(confirm(details + '\n\nDo you want to message / schedule with this user?')){
+    // quick action: route to browse and focus this user
+    route('browse');
+    setTimeout(()=>{ alert('Use the Schedule or Start Video buttons next to the user card.') },200);
+  }
+}
+
+// scheduling — transfer token from student to teacher
+function scheduleLesson(teacherId){
+  const student = getCurrent();
+  if(!student){ alert('Please create a profile first'); route('home'); return; }
+  if(student.tokens < 1){ return alert('Not enough tokens. Teach a session to earn tokens.'); }
+  if(!confirm('Schedule lesson with this user? This will spend 1 token.')) return;
+  student.tokens = (student.tokens || 0) - 1;
+  const teacher = users.find(x=>x.id===teacherId);
+  teacher.tokens = (teacher.tokens || 0) + 1;
+  // add a small review placeholder
+  teacher.reviews = teacher.reviews || [];
+  teacher.reviews.push({ from: student.id, note: `Scheduled lesson (${Date.now()})` });
+  save();
+  alert('Lesson scheduled. Token transferred. You can start a video room to meet.');
+  route('browse');
+}
+
+// Jitsi integration — create a room and embed
+let activeRoom = null;
+function createJitsiRoom(teacherId){
+  const student = getCurrent();
+  if(!student){ alert('Please create a profile first'); route('home'); return; }
+  const roomName = `SkillEx_${teacherId}_${student.id}_${Date.now().toString(36)}`;
+  activeRoom = { roomName, teacherId, studentId: student.id };
+  // open room view
+  route('room');
+  // also copy link to clipboard automatically
+  const link = `https://meet.jit.si/${roomName}`;
+  navigator.clipboard?.writeText(link).then(()=> console.log('copied')).catch(()=>{});
+}
+
+// Room view with Jitsi embed
+function renderRoom(){
+  if(!activeRoom) { route('browse'); return; }
+  const { roomName } = activeRoom;
+  $('#root').innerHTML = '';
+  const card = el('div', { class:'bg-white p-6 rounded-lg shadow-lg' },
+    el('div', { class:'flex items-center justify-between' },
+      el('div', {},
+        el('h3', { class:'text-lg font-semibold' }, 'Live Lesson Room'),
+        el('div', { class:'text-sm text-slate-500 mt-1' }, `Room: ${roomName}`)
+      ),
+      el('div', {},
+        el('button', { class:'px-3 py-1 border rounded mr-2', onclick: ()=> { navigator.clipboard.writeText(`https://meet.jit.si/${roomName}`); alert('Link copied'); } }, 'Copy Link'),
+        el('button', { class:'px-3 py-1 bg-slate-800 text-white rounded', onclick: ()=> { route('browse'); activeRoom = null; } }, 'Exit')
+      )
+    ),
+    el('div', { class:'mt-4 w-full h-[60vh] rounded overflow-hidden border' },
+      // Jitsi iframe embed
+      el('iframe', { src:`https://meet.jit.si/${roomName}#userInfo.displayName="${(getCurrent()||{}).name || 'Guest'}"`, style:'width:100%;height:100%;border:0;', allow:'camera; microphone; fullscreen' })
+    ),
+    el('div', { class:'mt-3 text-xs text-slate-500' }, 'Tips: Allow camera and mic access. Jitsi rooms are ephemeral and free (hosted at meet.jit.si).')
+  );
+  $('#root').appendChild(card);
+}
+
+// small bootstrap: create a few demo users if none exist
+function ensureDemos(){
+  if(users.length > 0) return;
+  users = [
+    { id: uid(), name:'Asha Patel', bio:'Graphic designer & illustrator', teaches:['Photoshop','Illustrator','Figma'], learns:['React','Node'], tokens:2, ratings:[4,5], reviews:[] },
+    { id: uid(), name:'Ravi Kumar', bio:'Frontend dev — loves teaching beginners', teaches:['HTML','CSS','JavaScript'], learns:['Illustration','UI'], tokens:3, ratings:[5,5,4], reviews:[] },
+    { id: uid(), name:'Neha Singh', bio:'Math tutor & data enthusiast', teaches:['Statistics','Excel'], learns:['Python','Web dev'], tokens:1, ratings:[4], reviews:[] },
+  ];
+  save();
+}
+ensureDemos();
+
+// Header nav wiring
+$('#navHome').onclick = ()=> route('home');
+$('#navBrowse').onclick = ()=> route('browse');
+$('#navProfile').onclick = ()=> route('profile');
+
+// initial render
+renderHeader();
+route('home');
+
+</script>
+</body>
+</html>
